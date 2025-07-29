@@ -1,0 +1,10 @@
+langchain
+langchain-community
+pypdf
+sentence-transformers 
+pinecone
+dotenv
+fastapi
+uvicorn
+requests
+faiss-cpu
