@@ -37,7 +37,7 @@ def create_faiss_index():
     print(f"FAISS index and texts saved as {KB_NAME}.")
 
 
-def search_faiss_index(index_name: str, query: str, top_k: int = 5) -> list[str]:
+def search_faiss_index(query: str, top_k: int = 5, index_name: str = "faiss_index") -> list[str]:
     """
     Search the FAISS index for the top_k most relevant text chunks based on the query.
     """
@@ -54,5 +54,4 @@ def search_faiss_index(index_name: str, query: str, top_k: int = 5) -> list[str]
     
     # Retrieve the corresponding text chunks
     context_chunks = [texts[i] for i in indices[0]]
-    
     return context_chunks
