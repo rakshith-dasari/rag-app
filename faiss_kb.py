@@ -1,57 +1,99 @@
 import os
 import pickle
-import numpy as np
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 from utils import clean_text
 import faiss
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s',
+                    handlers=[
+                        logging.FileHandler("faiss_kb.log"),
+                        logging.StreamHandler()
+                    ])
+
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-def create_faiss_index():
-    KB_NAME = "faiss_index"
-    # Step 1: Load and chunk PDF
-    loader = PyPDFLoader("main.pdf")
-    pages = loader.load()
+def get_kb_name_from_url(pdf_url: str) -> str:
+    """
+    Extract the knowledge base name from the PDF URL.
+    """
+    logging.info(f"Extracting knowledge base name from URL: {pdf_url}")
+    kb_name = pdf_url.split("/")[-1].replace(".pdf", "")
+    logging.info(f"Knowledge base name: {kb_name}")
+    return kb_name
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-    documents = splitter.split_documents(pages)
+def generate_kb(pdf_url: str):
+    logging.info(f"Generating knowledge base for PDF: {pdf_url}")
+    try:
+        KB_NAME = get_kb_name_from_url(pdf_url)
 
-    texts = [clean_text(doc.page_content) for doc in documents]
-    print(f"Loaded and cleaned {len(texts)} text chunks.")
+        # Step 2: Load and chunk PDF
+        logging.info("Loading and chunking PDF...")
+        loader = PyPDFLoader(pdf_url)
+        pages = loader.load()
 
-    # Step 2: Generate embeddings using all-MiniLM
-    embeddings = model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
+        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+        documents = splitter.split_documents(pages)
 
-    # Step 3: Build FAISS index
-    dimension = embeddings.shape[1]
-    faiss_index = faiss.IndexFlatL2(dimension)
-    faiss_index.add(embeddings)
-    print(f"FAISS index created with {faiss_index.ntotal} vectors.")
+        texts = [clean_text(doc.page_content) for doc in documents]
+        logging.info(f"Loaded and cleaned {len(texts)} text chunks.")
 
-    # Step 4: Save index and metadata
-    faiss.write_index(faiss_index, f"{KB_NAME}.index")
-    with open(f"{KB_NAME}_texts.pkl", "wb") as f:
-        pickle.dump(texts, f)
+        # Step 3: Generate embeddings using all-MiniLM
+        logging.info("Generating embeddings...")
+        embeddings = model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
+        logging.info("Embeddings generated.")
 
-    print(f"FAISS index and texts saved as {KB_NAME}.")
+        # Step 4: Build FAISS index
+        logging.info("Building FAISS index...")
+        dimension = embeddings.shape[1]
+        faiss_index = faiss.IndexFlatL2(dimension)
+        faiss_index.add(embeddings)
+        logging.info(f"FAISS index created with {faiss_index.ntotal} vectors.")
 
+        # Step 5: Save index and metadata
+        logging.info("Saving FAISS index and texts...")
+        faiss.write_index(faiss_index, f"{KB_NAME}.index")
+        with open(f"{KB_NAME}_texts.pkl", "wb") as f:
+            pickle.dump(texts, f)
 
-def search_faiss_index(query: str, top_k: int = 5, index_name: str = "faiss_index") -> list[str]:
+        logging.info(f"FAISS index and texts saved as {KB_NAME}.")
+    except Exception as e:
+        logging.error(f"Error generating knowledge base: {e}")
+        raise
+
+def search_faiss_index(query: str, pdf_url: str, top_k: int = 5) -> list[str]:
     """
     Search the FAISS index for the top_k most relevant text chunks based on the query.
     """
-    # Load the FAISS index and texts
-    faiss_index = faiss.read_index(f"{index_name}.index")
-    with open(f"{index_name}_texts.pkl", "rb") as f:
-        texts = pickle.load(f)
+    logging.info(f"Searching FAISS index for query: '{query}'")
+    try:
+        # Load the FAISS index and texts
+        index_name = get_kb_name_from_url(pdf_url)
+        logging.info(f"Loading FAISS index: {index_name}.index")
+        faiss_index = faiss.read_index(f"{index_name}.index")
+        logging.info(f"Loading texts: {index_name}_texts.pkl")
+        with open(f"{index_name}_texts.pkl", "rb") as f:
+            texts = pickle.load(f)
 
-    # Generate embedding for the query
-    query_embedding = model.encode([query], convert_to_numpy=True)
+        # Generate embedding for the query
+        logging.info("Generating embedding for the query...")
+        query_embedding = model.encode([query], convert_to_numpy=True)
+        logging.info("Query embedding generated.")
 
-    # Search the index
-    distances, indices = faiss_index.search(query_embedding, top_k)
-    
-    # Retrieve the corresponding text chunks
-    context_chunks = [texts[i] for i in indices[0]]
-    return context_chunks
+        # Search the index
+        logging.info(f"Searching index for top {top_k} results...")
+        distances, indices = faiss_index.search(query_embedding, top_k)
+        logging.debug(f"Distances: {distances}")
+        logging.debug(f"Indices: {indices}")
+
+        # Retrieve the corresponding text chunks
+        context_chunks = [texts[i] for i in indices[0]]
+        logging.info(f"Found {len(context_chunks)} relevant text chunks.")
+        return context_chunks
+    except Exception as e:
+        logging.error(f"Error searching FAISS index: {e}")
+        raise
