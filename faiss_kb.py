@@ -1,7 +1,7 @@
 import os
 import pickle
 
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import CrossEncoder, SentenceTransformer
 from utils import clean_text, get_kb_name_from_url, parse_pdf
 import faiss
 import logging
@@ -14,13 +14,14 @@ logging.basicConfig(level=logging.INFO,
                         logging.StreamHandler()
                     ])
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+model = SentenceTransformer("BAAI/bge-base-en-v1.5")
+reranker = CrossEncoder("BAAI/bge-reranker-base")
 
 def generate_kb(pdf_url: str):
     logging.info(f"Generating knowledge base for PDF: {pdf_url}")
     try:
         KB_NAME = get_kb_name_from_url(pdf_url)
-        if KB_NAME in os.listdir():
+        if os.path.exists(KB_NAME+".index"):
             logging.info(f"Knowledge base {KB_NAME} already exists. Skipping generation.")
             return
         texts = parse_pdf(pdf_url)
@@ -47,7 +48,7 @@ def generate_kb(pdf_url: str):
         logging.error(f"Error generating knowledge base: {e}")
         raise
 
-def search_faiss_index(query: str, pdf_url: str, top_k: int = 5) -> list[str]:
+def search_faiss_index(query: str, pdf_url: str, top_k: int = 10) -> list[str]:
     """
     Search the FAISS index for the top_k most relevant text chunks based on the query.
     """
@@ -71,9 +72,14 @@ def search_faiss_index(query: str, pdf_url: str, top_k: int = 5) -> list[str]:
         distances, indices = faiss_index.search(query_embedding, top_k)
         logging.debug(f"Distances: {distances}")
         logging.debug(f"Indices: {indices}")
+        initial_chunks = [texts[i] for i in indices[0]]
 
-        # Retrieve the corresponding text chunks
-        context_chunks = [texts[i] for i in indices[0]]
+        # Rerank the results using the cross-encoder
+        logging.info("Reranking results using cross-encoder...")
+        reranked_scores = reranker.predict([(query, chunk) for chunk in initial_chunks])
+        ranked_chunks = sorted(zip(initial_chunks, reranked_scores), key=lambda x: x[1], reverse=True)
+        context_chunks = [chunk for chunk, score in ranked_chunks[:5]]
+
         logging.info(f"Found {len(context_chunks)} relevant text chunks.")
         return context_chunks
     except Exception as e:

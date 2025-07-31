@@ -29,18 +29,18 @@ def clean_text(text: str) -> str:
     logging.debug(f"Cleaned text: '{text[:50]}...' ")
     return text
 
-def parse_pdf(pdf_url:str) -> list[str]:
-    logging.info(f"Generating knowledge base for PDF: {pdf_url}")
-    logging.info("Loading and chunking PDF...")
-    loader = PyPDFLoader(pdf_url)
-    pages = loader.load()
+# def parse_pdf(pdf_url:str) -> list[str]:
+#     logging.info(f"Generating knowledge base for PDF: {pdf_url}")
+#     logging.info("Loading and chunking PDF...")
+#     loader = PyPDFLoader(pdf_url)
+#     pages = loader.load()
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-    documents = splitter.split_documents(pages)
+#     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+#     documents = splitter.split_documents(pages)
 
-    texts = [clean_text(doc.page_content) for doc in documents]
-    logging.info(f"Loaded and cleaned {len(texts)} text chunks.")
-    return texts
+#     texts = [clean_text(doc.page_content) for doc in documents]
+#     logging.info(f"Loaded and cleaned {len(texts)} text chunks.")
+#     return texts
 
 def get_kb_name_from_url(pdf_url: str) -> str:
     """
@@ -55,3 +55,73 @@ def get_kb_name_from_url(pdf_url: str) -> str:
     kb_name = f"{base_name[:10]}-{hash_part}"
     logging.info(f"Knowledge base name: {kb_name}")
     return kb_name
+
+import re
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.docstore.document import Document
+
+def split_with_headings(text: str,
+                        heading_regex: str = r"^\d+\.\s+[A-Z].+$",
+                        chunk_size: int = 800,
+                        chunk_overlap: int = 100) -> list[str]:
+    """
+    Split raw text into chunks that each start with the last seen heading.
+    """
+    chunks, current_heading, buffer = [], None, []
+
+    for line in text.splitlines():
+        if re.match(heading_regex, line):
+            current_heading = line.strip()
+            continue
+
+        buffer.append(line)
+        # flush buffer if it’s getting large
+        if sum(len(l) for l in buffer) >= chunk_size:
+            body = "\n".join(buffer).strip()
+            if body:
+                chunks.append(f"{current_heading or ''}\n{body}")
+            buffer = []
+
+    # final flush
+    if buffer:
+        body = "\n".join(buffer).strip()
+        chunks.append(f"{current_heading or ''}\n{body}")
+
+    # second-level splitting for long bodies
+    rsplitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size, chunk_overlap=chunk_overlap
+    )
+    final_chunks = []
+    for chunk in chunks:
+        final_chunks.extend(rsplitter.split_text(chunk))
+
+    return final_chunks
+
+from langchain.document_loaders import PyPDFLoader
+
+def parse_pdf(pdf_url: str) -> list[str]:
+    """
+    1. Load the PDF
+    2. Concatenate all pages into one string (so headings flow correctly)
+    3. Split with heading-aware splitter
+    4. Clean and return
+    """
+    logging.info(f"Generating knowledge base for PDF: {pdf_url}")
+
+    # 1️⃣  Load pages
+    loader = PyPDFLoader(pdf_url)
+    pages = loader.load()
+    full_text = "\n".join(p.page_content for p in pages)
+
+    # 2️⃣  Heading-aware split
+    logging.info("Chunking with heading-aware splitter ...")
+    raw_chunks = split_with_headings(full_text,
+                                     heading_regex=r"^\d+\.\s+[A-Z].+$",
+                                     chunk_size=800,
+                                     chunk_overlap=100)
+
+    # 3️⃣  Clean each chunk (your existing clean_text util)
+    texts = [clean_text(chunk) for chunk in raw_chunks]
+
+    logging.info(f"Loaded and cleaned {len(texts)} text chunks.")
+    return texts

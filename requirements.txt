@@ -8,3 +8,5 @@ fastapi
 uvicorn
 requests
 faiss-cpu
+openai
+google-genai
