@@ -9,7 +9,7 @@ _A hyper-efficient, production-grade Retrieval-Augmented Generation stack_
 
 ---
 
-## 🔥 Key Buzz-Features
+## 🔥 Key Features
 
 | Category       | Highlights                                                                                            |
 | -------------- | ----------------------------------------------------------------------------------------------------- |
