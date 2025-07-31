@@ -20,6 +20,9 @@ def generate_kb(pdf_url: str):
     logging.info(f"Generating knowledge base for PDF: {pdf_url}")
     try:
         KB_NAME = get_kb_name_from_url(pdf_url)
+        if KB_NAME in os.listdir():
+            logging.info(f"Knowledge base {KB_NAME} already exists. Skipping generation.")
+            return
         texts = parse_pdf(pdf_url)
         # Step 3: Generate embeddings using all-MiniLM
         logging.info("Generating embeddings...")

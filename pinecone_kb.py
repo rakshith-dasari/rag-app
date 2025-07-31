@@ -2,7 +2,7 @@ import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from pinecone import Pinecone
-from utils import clean_text, parse_pdf
+from utils import parse_pdf, get_kb_name_from_url
 import logging
 
 # Configure logging
@@ -21,14 +21,11 @@ def generate_pinecone_kb(pdf_path: str):
     logging.info(f"Generating Pinecone knowledge base for {pdf_path}")
     try:
         
-
-        texts = parse_pdf(pdf_path)
-
         # Step 2: Initialize Pinecone
         logging.info("Initializing Pinecone...")
         pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 
-        index_name = "pdf-index"
+        index_name = get_kb_name_from_url(pdf_path)
         if index_name not in pc.list_indexes().names():
             logging.info(f"Creating new Pinecone index: {index_name}")
             pc.create_index_for_model(
@@ -41,30 +38,51 @@ def generate_pinecone_kb(pdf_path: str):
                     "metric": "cosine"
                 }
             )
+            index = pc.Index(index_name)
+            texts = parse_pdf(pdf_path)
+            # Step 3: Upsert chunks directly
+            records = [
+                {"id": f"chunk-{i}", "chunk_text": text}
+                for i, text in enumerate(texts)
+            ]
+
+            def batch_records(records, batch_size=96):
+                for i in range(0, len(records), batch_size):
+                    yield records[i:i+batch_size]
+
+            logging.info("Upserting records to Pinecone...")
+            for batch in batch_records(records, batch_size=96):
+                index.upsert_records(namespace="__default__", records=batch)
+
+            logging.info(f"Upserted {len(records)} text chunks to Pinecone using built-in embedding.")
         else:
             logging.info(f"Using existing Pinecone index: {index_name}")
-
-        index = pc.Index(index_name)
-
-        # Step 3: Upsert chunks directly
-        records = [
-            {"id": f"chunk-{i}", "chunk_text": text}
-            for i, text in enumerate(texts)
-        ]
-
-        def batch_records(records, batch_size=96):
-            for i in range(0, len(records), batch_size):
-                yield records[i:i+batch_size]
-
-        logging.info("Upserting records to Pinecone...")
-        for batch in batch_records(records, batch_size=96):
-            index.upsert_records(namespace="__default__", records=batch)
-
-        logging.info(f"Upserted {len(records)} text chunks to Pinecone using built-in embedding.")
 
     except Exception as e:
         logging.error(f"Error generating Pinecone knowledge base: {e}", exc_info=True)
         raise
 
-if __name__ == "__main__":
-    generate_pinecone_kb("main.pdf")
+def search_pinecone_kb(query: str, pdf_url: str, top_k: int = 5) -> list[str]:
+    PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+    INDEX_NAME = get_kb_name_from_url(pdf_url)
+    NAMESPACE = "__default__"
+
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+    pinecone_index = pc.Index(INDEX_NAME)
+    logging.info(f"Received search request with query: {query}")
+    query_dict = {
+        "inputs": {"text": query},
+        "top_k": top_k
+    }
+
+    result = pinecone_index.search(
+        namespace=NAMESPACE,
+        query=query_dict,
+        fields=["chunk_text"]
+    )
+    context_chunks = [
+        hit["fields"].get("chunk_text", "")
+        for hit in result["result"]["hits"]
+    ]
+    logging.info(f"Found {len(context_chunks)} chunks from pinecone index.")
+    return context_chunks

@@ -2,6 +2,7 @@ import re
 import logging
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import hashlib
 
 # Configure logging
 logging.basicConfig(level=logging.INFO,
@@ -13,6 +14,13 @@ logging.basicConfig(level=logging.INFO,
 
 def clean_text(text: str) -> str:
     logging.debug(f"Cleaning text: '{text[:50]}...' ")
+    # footer_line_count = 6  # Number of footer lines to remove
+    # # Step 1: Strip footer lines (from bottom)
+    # lines = text.splitlines()
+    # if len(lines) > footer_line_count:
+    #     lines = lines[:-footer_line_count]
+    
+    # text = "\n".join(lines)
     text = text.strip()                           # Remove leading/trailing whitespace
     text = re.sub(r'\s+', ' ', text)              # Collapse multiple whitespace/newlines
     text = re.sub(r'\.{3,}', '...', text)         # Normalize long ellipses
@@ -39,6 +47,11 @@ def get_kb_name_from_url(pdf_url: str) -> str:
     Extract the knowledge base name from the PDF URL.
     """
     logging.info(f"Extracting knowledge base name from URL: {pdf_url}")
-    kb_name = pdf_url.split("/")[-1].replace(".pdf", "")
+    base_name = pdf_url.split("/")[-1].replace(".pdf", "")
+    # Create a hash for uniqueness
+    hash_part = hashlib.md5(pdf_url.encode()).hexdigest()[:8]
+    # Keep only lowercase alphanumeric characters in base_name
+    base_name = re.sub(r'[^a-z0-9]', '', base_name.lower())
+    kb_name = f"{base_name[:10]}-{hash_part}"
     logging.info(f"Knowledge base name: {kb_name}")
     return kb_name
