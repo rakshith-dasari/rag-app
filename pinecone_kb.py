@@ -2,7 +2,7 @@ import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from pinecone import Pinecone
-from utils import clean_text
+from utils import clean_text, parse_pdf
 import logging
 
 # Configure logging
@@ -20,16 +20,9 @@ load_dotenv()
 def generate_pinecone_kb(pdf_path: str):
     logging.info(f"Generating Pinecone knowledge base for {pdf_path}")
     try:
-        # Step 1: Load and split PDF
-        logging.info(f"Loading PDF: {pdf_path}")
-        loader = PyPDFLoader(pdf_path)
-        pages = loader.load()
+        
 
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-        documents = splitter.split_documents(pages)
-
-        texts = [clean_text(doc.page_content) for doc in documents]
-        logging.info(f"Loaded and cleaned {len(texts)} text chunks.")
+        texts = parse_pdf(pdf_path)
 
         # Step 2: Initialize Pinecone
         logging.info("Initializing Pinecone...")

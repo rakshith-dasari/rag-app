@@ -1,9 +1,8 @@
 import os
 import pickle
-from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 from sentence_transformers import SentenceTransformer
-from utils import clean_text
+from utils import clean_text, get_kb_name_from_url, parse_pdf
 import faiss
 import logging
 
@@ -17,31 +16,11 @@ logging.basicConfig(level=logging.INFO,
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-def get_kb_name_from_url(pdf_url: str) -> str:
-    """
-    Extract the knowledge base name from the PDF URL.
-    """
-    logging.info(f"Extracting knowledge base name from URL: {pdf_url}")
-    kb_name = pdf_url.split("/")[-1].replace(".pdf", "")
-    logging.info(f"Knowledge base name: {kb_name}")
-    return kb_name
-
 def generate_kb(pdf_url: str):
     logging.info(f"Generating knowledge base for PDF: {pdf_url}")
     try:
         KB_NAME = get_kb_name_from_url(pdf_url)
-
-        # Step 2: Load and chunk PDF
-        logging.info("Loading and chunking PDF...")
-        loader = PyPDFLoader(pdf_url)
-        pages = loader.load()
-
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-        documents = splitter.split_documents(pages)
-
-        texts = [clean_text(doc.page_content) for doc in documents]
-        logging.info(f"Loaded and cleaned {len(texts)} text chunks.")
-
+        texts = parse_pdf(pdf_url)
         # Step 3: Generate embeddings using all-MiniLM
         logging.info("Generating embeddings...")
         embeddings = model.encode(texts, show_progress_bar=True, convert_to_numpy=True)

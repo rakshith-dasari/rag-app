@@ -77,7 +77,7 @@ class HackRxRequest(BaseModel):
     documents: str
     questions: list[str]
 
-@app.post("/hackrx/run")
+@app.post("/api/v1/hackrx/run")
 def run_hackrx(request: HackRxRequest):
     try:
         logging.info(f"Received hackrx request with {len(request.questions)} questions.")

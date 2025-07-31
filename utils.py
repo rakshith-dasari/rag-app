@@ -1,5 +1,7 @@
 import re
 import logging
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO,
@@ -18,3 +20,25 @@ def clean_text(text: str) -> str:
     text = re.sub(r'(?<=\w)- (?=\w)', '', text)   # Fix hyphenation from PDF line breaks
     logging.debug(f"Cleaned text: '{text[:50]}...' ")
     return text
+
+def parse_pdf(pdf_url:str) -> list[str]:
+    logging.info(f"Generating knowledge base for PDF: {pdf_url}")
+    logging.info("Loading and chunking PDF...")
+    loader = PyPDFLoader(pdf_url)
+    pages = loader.load()
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+    documents = splitter.split_documents(pages)
+
+    texts = [clean_text(doc.page_content) for doc in documents]
+    logging.info(f"Loaded and cleaned {len(texts)} text chunks.")
+    return texts
+
+def get_kb_name_from_url(pdf_url: str) -> str:
+    """
+    Extract the knowledge base name from the PDF URL.
+    """
+    logging.info(f"Extracting knowledge base name from URL: {pdf_url}")
+    kb_name = pdf_url.split("/")[-1].replace(".pdf", "")
+    logging.info(f"Knowledge base name: {kb_name}")
+    return kb_name
