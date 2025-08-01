@@ -1,4 +1,4 @@
-# ⚡️ RAG-Xpress — FAISS + LangChain + Cross-Encoder Reranker
+# RAG-Xpress — FAISS + LangChain + Cross-Encoder Reranker
 
 _A hyper-efficient, production-grade Retrieval-Augmented Generation stack_
 
@@ -9,7 +9,7 @@ _A hyper-efficient, production-grade Retrieval-Augmented Generation stack_
 
 ---
 
-## 🔥 Key Features
+## Key Features
 
 | Category       | Highlights                                                                                            |
 | -------------- | ----------------------------------------------------------------------------------------------------- |
@@ -20,7 +20,7 @@ _A hyper-efficient, production-grade Retrieval-Augmented Generation stack_
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer                | Tech                                    |
 | -------------------- | --------------------------------------- |
